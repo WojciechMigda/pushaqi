@@ -272,6 +272,7 @@ def push_aqi_status(
         timeout=5,
     ):
     pm25: List[float] = [float(data['pm25'])for _, data in measurements.items() if 'pm25' in data]
+    logging.info(f'PM2.5 concentrations: {pm25}')
     pm25 = pm25[:3]
     if len(pm25) == 0:
         logging.error(f'Not a single one PM2.5 measurement was found retrieved data. {measurements}')
