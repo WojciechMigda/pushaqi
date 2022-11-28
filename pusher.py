@@ -15,6 +15,31 @@ from requests.packages.urllib3.util.retry import Retry
 from xml.dom import minidom
 
 
+MASTODON_HOST = os.environ['MASTODON_HOST']
+MASTODON_TOKEN = os.environ['MASTODON_TOKEN']
+
+AQI_PM25_LEVELS = {
+    'Good' : dict(hi=12.0,
+                  sensitive=None,
+                  regular=None),
+    'Moderate': dict(hi=25.4,
+                     sensitive='Unusually sensitive people should consider reducing prolonged or heavy exertion.',
+                     regular=None),
+    'Unhealthy for Sensitive Groups': dict(hi=55.4,
+                                           sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should reduce prolonged or heavy exertion.',
+                                           regular=None),
+    'Unhealthy': dict(hi=150.4,
+                      sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should reduce prolonged or heavy exertion.',
+                      regular='Everyone else should reduce prolonged or heavy exertion'),
+    'Very Unhealthy': dict(hi=250.4,
+                           sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should avoid all physical activity outdoors',
+                           regular='Everyone else should avoid prolonged or heavy exertion.'),
+    'Hazardous': dict(hi=500.4,
+                      sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should remain indoors and keep activity levels low.',
+                      regular='Everyone should avoid all physical activity outdoors.'),
+}
+
+
 """
 pm10        ug/m3
 pm25        ug/m3
@@ -221,8 +246,67 @@ def pull_measurements(retries: int, timeout: int) -> Dict[str, Dict[str, str]]:
     return meas
 
 
-def push_aqi_status(measurements: Dict[str, Dict[str, str]]):
-    pass
+def aqi_by_pm25(pm25: float) -> str:
+    for name, d in AQI_PM25_LEVELS.items():
+        if pm25 <= d['hi']:
+            return name
+    return 'Hazardous'
+
+
+def push_aqi_status(
+        measurements: Dict[str, Dict[str, str]],
+        former_bad_aqi: Union[bool, None],
+        retries=3,
+        timeout=5,
+    ):
+    pm25: List[float] = [float(data['pm25'])for _, data in measurements.items() if 'pm25' in data]
+    pm25 = pm25[:3]
+    if len(pm25) == 0:
+        logging.error(f'Not a single one PM2.5 measurement was found retrieved data. {measurements}')
+        return
+    pm25_avg: float = sum(pm25) / len(pm25)
+    aqi: str = aqi_by_pm25(pm25_avg)
+
+    bad_aqi_flag: bool = aqi != 'Good'
+    with open('aqi_status.txt', 'wt') as ofile:
+        ofile.write(f'{int(bad_aqi_flag)}')
+
+    send_flag: bool = (former_bad_aqi is None) or (bad_aqi_flag) or (not bad_aqi_flag and former_bad_aqi)
+    if not send_flag:
+        return
+
+    if bad_aqi_flag:
+        status: str = (
+            f"Kraków bad air quality alert ⚠ {aqi.upper()}\n\n"
+            f"PM2.5 level is {pm25_avg:.0f} μg/m³"
+        )
+        if AQI_PM25_LEVELS[aqi]['regular']:
+            status += f"\n\n{AQI_PM25_LEVELS[aqi]['regular']}"
+        if AQI_PM25_LEVELS[aqi]['sensitive']:
+            status += f"\n\n{AQI_PM25_LEVELS[aqi]['sensitive']}"
+        status += "\n\n#SMOG #KRAKÓW"
+        pass
+    else:
+        status: str = f"Kraków air quality is back to normal.\n\nPM2.5 level is {pm25_avg:.0f} μg/m³"
+
+    session: requests.Session = requests_retry_session(retries=retries)
+    url: str = f'{MASTODON_HOST}/api/v1/statuses'
+    data = dict(
+        status=status,
+    )
+    try:
+        res = session.post(url, data=data, headers=dict(Authorization=f'Bearer {MASTODON_TOKEN}'))
+        if res.status_code < 200 or 300 <= res.status_code:
+            logging.error(f'Http error: status={res.status_code}')
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"Http failure: {e}")
+    except requests.exceptions.ConnectionError as e:
+        logging.error(f"Connection failure: {e}")
+    except requests.exceptions.Timeout as e:
+        logging.error(f"Network timeout failure: {e}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Core requests failure: {e}")
+    return
 
 
 def main(
@@ -231,6 +315,7 @@ def main(
     report: ("Report live values", "flag", "R"),
     retries: ("Number of HTTP(s) retries.", "option", 'r', int)=3,
     timeout: ("HTTP(s) timeout, in seconds.", "option", 't', int)=5,
+    former_aqi: ("Previous AQI status, False=good, True=polluted.", 'positional', None, bool)=None,
     ):
 
     if test_chars:
@@ -249,7 +334,8 @@ def main(
                 print(f' {name:>12s}{value:>8s}')
     else:
         measurements = pull_measurements(retries=retries, timeout=timeout)
-        push_aqi_status(measurements)
+        push_aqi_status(measurements, former_bad_aqi=former_aqi,
+            retries=retries, timeout=timeout)
 
     return os.EX_OK
 
