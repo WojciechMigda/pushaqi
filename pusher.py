@@ -20,21 +20,33 @@ MASTODON_TOKEN = os.environ['TOKEN']
 
 AQI_PM25_LEVELS = {
     'Good' : dict(hi=12.0,
+                  img='pics/00E400.gif',
+                  media='109423526827500870',
                   sensitive=None,
                   regular=None),
     'Moderate': dict(hi=25.4,
+                     img='pics/FFFF00.gif',
+                     media='109423535149165217',
                      sensitive='Unusually sensitive people should consider reducing prolonged or heavy exertion.',
                      regular=None),
     'Unhealthy for Sensitive Groups': dict(hi=55.4,
+                                           img='pics/FF7E00.gif',
+                                           media='109423538004702787',
                                            sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should reduce prolonged or heavy exertion.',
                                            regular=None),
     'Unhealthy': dict(hi=150.4,
+                      img='pics/FF0000.gif',
+                      media='109423584380625731',
                       sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should reduce prolonged or heavy exertion.',
                       regular='Everyone else should reduce prolonged or heavy exertion'),
     'Very Unhealthy': dict(hi=250.4,
+                           img='pics/8F3F97.gif',
+                           media='109423588030896096',
                            sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should avoid all physical activity outdoors',
                            regular='Everyone else should avoid prolonged or heavy exertion.'),
     'Hazardous': dict(hi=500.4,
+                      img='pics/7E0023.gif',
+                      media='109423591250887878',
                       sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should remain indoors and keep activity levels low.',
                       regular='Everyone should avoid all physical activity outdoors.'),
 }
@@ -293,9 +305,10 @@ def push_aqi_status(
 
     session: requests.Session = requests_retry_session(retries=retries)
     url: str = f'{MASTODON_HOST}/api/v1/statuses'
-    data = dict(
-        status=status,
-    )
+    data = {
+        'status': status,
+        'media_ids[]': [AQI_PM25_LEVELS[aqi]['media']],
+    }
     try:
         res = session.post(url, data=data, headers=dict(Authorization=f'Bearer {MASTODON_TOKEN}'))
         if res.status_code < 200 or 300 <= res.status_code:
