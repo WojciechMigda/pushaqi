@@ -5,6 +5,7 @@ import os
 import sys
 import re
 import logging
+from pathlib import Path
 import plac
 from typing import Dict, List, Set, Tuple, Union, Any
 
@@ -21,32 +22,26 @@ MASTODON_TOKEN = os.environ['TOKEN']
 AQI_PM25_LEVELS = {
     'Good' : dict(hi=12.0,
                   img='pics/00E400.gif',
-                  media='109423526827500870',
                   sensitive=None,
                   regular=None),
     'Moderate': dict(hi=25.4,
                      img='pics/FFFF00.gif',
-                     media='109423535149165217',
                      sensitive='Unusually sensitive people should consider reducing prolonged or heavy exertion.',
                      regular=None),
     'Unhealthy for Sensitive Groups': dict(hi=55.4,
                                            img='pics/FF7E00.gif',
-                                           media='109423538004702787',
                                            sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should reduce prolonged or heavy exertion.',
                                            regular=None),
     'Unhealthy': dict(hi=150.4,
                       img='pics/FF0000.gif',
-                      media='109423584380625731',
                       sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should reduce prolonged or heavy exertion.',
                       regular='Everyone else should reduce prolonged or heavy exertion'),
     'Very Unhealthy': dict(hi=250.4,
                            img='pics/8F3F97.gif',
-                           media='109423588030896096',
                            sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should avoid all physical activity outdoors',
                            regular='Everyone else should avoid prolonged or heavy exertion.'),
     'Hazardous': dict(hi=500.4,
                       img='pics/7E0023.gif',
-                      media='109423591250887878',
                       sensitive='People with heart or lung disease, older adults, children, and people of lower socioeconomic status should remain indoors and keep activity levels low.',
                       regular='Everyone should avoid all physical activity outdoors.'),
 }
@@ -265,6 +260,68 @@ def aqi_by_pm25(pm25: float) -> str:
     return 'Hazardous'
 
 
+def status_post(status: str, media_ids: List[str],
+        session: requests.Session, timeout: int
+    ) -> Tuple[bool, Union[requests.Response, None]]:
+    url: str = f'{MASTODON_HOST}/api/v1/statuses'
+    data = {
+        'status': status,
+        'media_ids[]': media_ids,
+    }
+    try:
+        res: requests.Response = session.post(url, timeout=timeout,
+            data=data, headers=dict(Authorization=f'Bearer {MASTODON_TOKEN}'))
+
+        if res.status_code < 200 or 300 <= res.status_code:
+            logging.error(f'Http error: status={res.status_code}')
+            return False, res
+
+        return True, res
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"Http failure: {e}")
+    except requests.exceptions.ConnectionError as e:
+        logging.error(f"Connection failure: {e}")
+    except requests.exceptions.Timeout as e:
+        logging.error(f"Network timeout failure: {e}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Core requests failure: {e}")
+    return False, None
+
+
+def attach_media(path: str, description: str,
+        session: requests.Session, timeout: int
+    ) -> Tuple[bool, Union[requests.Response, None]]:
+    url: str = f'{MASTODON_HOST}/api/v1/media'
+    data = {
+        'description': description,
+    }
+    files = {
+        'file': (
+            os.path.basename(path),
+            Path(path).open('rb'),
+            'application/octet-stream'
+        )
+    }
+    try:
+        res: requests.Response = session.post(url, timeout=timeout,
+            data=data, files=files, headers=dict(Authorization=f'Bearer {MASTODON_TOKEN}'))
+
+        if res.status_code < 200 or 300 <= res.status_code:
+            logging.error(f'Http error: status={res.status_code}')
+            return False, res
+
+        return True, res
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"Http failure: {e}")
+    except requests.exceptions.ConnectionError as e:
+        logging.error(f"Connection failure: {e}")
+    except requests.exceptions.Timeout as e:
+        logging.error(f"Network timeout failure: {e}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Core requests failure: {e}")
+    return False, None
+
+
 def push_aqi_status(
         measurements: Dict[str, Dict[str, str]],
         former_bad_aqi: Union[bool, None],
@@ -305,23 +362,17 @@ def push_aqi_status(
         status: str = f"Kraków air quality is back to normal. 🍃\n\nPM2.5 level is {pm25_avg:.0f} μg/m³"
 
     session: requests.Session = requests_retry_session(retries=retries)
-    url: str = f'{MASTODON_HOST}/api/v1/statuses'
-    data = {
-        'status': status,
-        'media_ids[]': [AQI_PM25_LEVELS[aqi]['media']],
-    }
-    try:
-        res = session.post(url, data=data, headers=dict(Authorization=f'Bearer {MASTODON_TOKEN}'))
-        if res.status_code < 200 or 300 <= res.status_code:
-            logging.error(f'Http error: status={res.status_code}')
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"Http failure: {e}")
-    except requests.exceptions.ConnectionError as e:
-        logging.error(f"Connection failure: {e}")
-    except requests.exceptions.Timeout as e:
-        logging.error(f"Network timeout failure: {e}")
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Core requests failure: {e}")
+
+    ok, res = attach_media(AQI_PM25_LEVELS[aqi]['img'], aqi, session=session, timeout=timeout)
+    if ok:
+        media_id = res.json().get('id', '')
+        logging.info(f'Attaching media_id={media_id}')
+        media_ids = [media_id]
+    else:
+        media_ids = []
+    ok, res = status_post(status, media_ids, session=session, timeout=timeout)
+    if ok:
+        logging.info(f'Status POST: {res.json()}')
     return
 
 
