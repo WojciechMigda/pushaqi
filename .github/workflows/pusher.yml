@@ -1,0 +1,32 @@
+# Use the hash sign to prefix a comment
+# +---------------- minute (0 - 59)
+# |  +------------- hour (0 - 23)
+# |  |  +---------- day of month (1 - 31)
+# |  |  |  +------- month (1 - 12)
+# |  |  |  |  +---- day of week (0 - 7) (Sunday=0 or 7)
+# |  |  |  |  |
+# *  *  *  *  *  command to be executed
+#--------------------------------------------------------------------------
+
+name: "AQI pusher"
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+
+jobs:
+  acquire-and-push:
+    name: Collect hourly AQI and push status
+    runs-on: ubuntu-latest
+    env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TOKEN: ${{ secrets.TOKEN }}
+        SERVER: ${{ secrets.SERVER }}
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build
+      run: |
+        python3 ./pusher.py ${SERVER} ${TOKEN} $(cat aqi_flag.txt)
+        ./commit.sh
