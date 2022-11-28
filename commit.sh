@@ -1,6 +1,6 @@
 #!/bin/bash
 
-[ -z "${INPUT_GITHUB_TOKEN}" ] && {
+[ -z "${GITHUB_TOKEN}" ] && {
     echo 'Missing input "github_token: ${{ secrets.GITHUB_TOKEN }}".';
     exit 1;
 };

@@ -31,5 +31,5 @@ jobs:
 
     - name: Collect hourly AQI and push status
       run: |
-        python3 ./pusher.py ${SERVER} ${TOKEN} $(cat aqi_flag.txt)
+        python3 ./pusher.py $(cat aqi_flag.txt)
         ./commit.sh

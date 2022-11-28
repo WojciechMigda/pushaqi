@@ -15,8 +15,8 @@ from requests.packages.urllib3.util.retry import Retry
 from xml.dom import minidom
 
 
-MASTODON_HOST = os.environ['MASTODON_HOST']
-MASTODON_TOKEN = os.environ['MASTODON_TOKEN']
+MASTODON_HOST = os.environ['SERVER']
+MASTODON_TOKEN = os.environ['TOKEN']
 
 AQI_PM25_LEVELS = {
     'Good' : dict(hi=12.0,
