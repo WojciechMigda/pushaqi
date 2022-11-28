@@ -289,7 +289,7 @@ def push_aqi_status(
         status += "\n\n#SMOG #KRAKÓW"
         pass
     else:
-        status: str = f"Kraków air quality is back to normal.\n\nPM2.5 level is {pm25_avg:.0f} μg/m³"
+        status: str = f"Kraków air quality is back to normal. 🍃\n\nPM2.5 level is {pm25_avg:.0f} μg/m³"
 
     session: requests.Session = requests_retry_session(retries=retries)
     url: str = f'{MASTODON_HOST}/api/v1/statuses'
