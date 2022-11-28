@@ -4,8 +4,33 @@
 import os
 import sys
 import re
+import logging
 import plac
 from typing import Dict, List, Set, Tuple, Union, Any
+
+import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+
+from xml.dom import minidom
+
+
+"""
+pm10        ug/m3
+pm25        ug/m3
+pm1         ug/m3
+pressure    mbar
+humidity    %
+temperature F
+wind        mph
+"""
+SENSORS = {
+    'Mikolajska':       'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.062006&longitude=19.940984&id=8077&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
+    'Szpitalna':        'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.064539&longitude=19.942561&id=87160&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
+    'Franciszkanska':   'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.059085&longitude=19.933919&id=10211&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
+    'Warszawska':       'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.070088&longitude=19.943812&id=87166&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
+    'Studencka':        'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.062418&longitude=19.928368&id=86934&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
+}
 
 
 CHAR_MAP = {
@@ -113,17 +138,118 @@ def test_number_recognition():
         assert svg_path_to_number(path) == number, f'Number expected {number} found {svg_path_to_number(path)}'
 
 
+def requests_retry_session(
+    retries: int=3,
+    backoff_factor: float=0.3,
+    status_forcelist: Tuple[int]=(500, 502, 503, 504),
+    session: Union[requests.Session, None]=None,
+) -> requests.Session:
+    session: requests.Session = session or requests.Session()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
+
+def collate_svg_paths(svg: str) -> str:
+    doc = minidom.parseString(svg)
+
+    paths: List[str] = [path.getAttribute('d')
+                        for path in doc.getElementsByTagName('path')]
+    doc.unlink()
+    return ''.join(paths)
+
+
+def pull_measurements(retries: int, timeout: int) -> Dict[str, Dict[str, str]]:
+    session: requests.Session = requests_retry_session(retries=retries)
+    meas: Dict[str, Dict[str, str]] = {}
+
+    def download(url: str):
+        try:
+            res = session.get(url, timeout=timeout)
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"Http failure: {e}")
+            return None
+        except requests.exceptions.ConnectionError as e:
+            logging.error(f"Connection failure: {e}")
+            return None
+        except requests.exceptions.Timeout as e:
+            logging.error(f"Network timeout failure: {e}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Core requests failure: {e}")
+            return None
+
+        if res.status_code < 200 or 300 <= res.status_code:
+            logging.error(f'Http error: status={res.status_code}')
+            return None
+
+        return res
+
+    for sensor, url in SENSORS.items():
+        res = download(url)
+        if res is None:
+            logging.warning(f'Pulling measurements for sensor {sensor} failed.')
+            continue
+        j = res.json()
+        address: str = j.get('address', '')
+        live: bool = j.get('isLive', False)
+        description: str = j.get('description', '')
+        m: List[dict] = j.get('measurements', [])
+
+        if len(m) == 0:
+            logging.warning(f'Sensor {sensor} has no measurements. isLive={live} Description: {description}')
+            continue
+
+        KEYS = set(('PM10', 'PM25', 'PM1', 'PRESSURE', 'HUMIDITY', 'TEMPERATURE', 'WIND_SPEED'))
+        measurement: Dict[str, str]
+        for measurement in m:
+            name: str = measurement.get('name', '')
+            value: str = measurement.get('value', '')
+            if name in KEYS:
+                params = meas.get(sensor, {})
+                params[name.lower()] = svg_path_to_number(collate_svg_paths(value))
+                meas[sensor] = params
+            pass
+    return meas
+
+
+def push_aqi_status(measurements: Dict[str, Dict[str, str]]):
+    pass
+
+
 def main(
     test_chars: ("Test character recognition", "flag", "tc"),
     test_nums: ("Test number recognition", "flag", "tn"),
+    report: ("Report live values", "flag", "R"),
+    retries: ("Number of HTTP(s) retries.", "option", 'r', int)=3,
+    timeout: ("HTTP(s) timeout, in seconds.", "option", 't', int)=5,
     ):
 
     if test_chars:
         test_character_recognition()
     elif test_nums:
         test_number_recognition()
+    elif report:
+        measurements = pull_measurements(retries=retries, timeout=timeout)
+        sensor: str
+        data: dict
+        for sensor, data in measurements.items():
+            print(f'{sensor}')
+            name: str
+            value: str
+            for name, value in data.items():
+                print(f' {name:>12s}{value:>8s}')
     else:
-        pass
+        measurements = pull_measurements(retries=retries, timeout=timeout)
+        push_aqi_status(measurements)
 
     return os.EX_OK
 
