@@ -269,6 +269,8 @@ def push_aqi_status(
 
     bad_aqi_flag: bool = aqi != 'Good'
     with open('aqi_status.txt', 'wt') as ofile:
+        ofile.write(f'{aqi}')
+    with open('aqi_flag.txt', 'wt') as ofile:
         ofile.write(f'{int(bad_aqi_flag)}')
 
     send_flag: bool = (former_bad_aqi is None) or (bad_aqi_flag) or (not bad_aqi_flag and former_bad_aqi)
