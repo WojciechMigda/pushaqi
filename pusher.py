@@ -385,6 +385,8 @@ def main(
     former_aqi: ("Previous AQI status, False=good, True=polluted.", 'positional', None, bool)=None,
     ):
 
+    logging.basicConfig(level=logging.INFO)
+
     if test_chars:
         test_character_recognition()
     elif test_nums:
