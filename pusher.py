@@ -356,7 +356,7 @@ def push_aqi_status(
             status += f"\n\n{AQI_PM25_LEVELS[aqi]['regular']}"
         if AQI_PM25_LEVELS[aqi]['sensitive']:
             status += f"\n\n{AQI_PM25_LEVELS[aqi]['sensitive']}"
-        status += "\n\n#SMOG #KRAKÓW"
+        status += "\n\n#SMOG #KRAKÓW #KrakówSmog"
         pass
     else:
         status: str = f"Kraków air quality is back to normal. 🍃\n\nPM2.5 level is {pm25_avg:.0f} μg/m³"
