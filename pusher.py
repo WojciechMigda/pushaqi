@@ -380,7 +380,7 @@ def main(
     test_chars: ("Test character recognition", "flag", "tc"),
     test_nums: ("Test number recognition", "flag", "tn"),
     report: ("Report live values", "flag", "R"),
-    retries: ("Number of HTTP(s) retries.", "option", 'r', int)=3,
+    retries: ("Number of HTTP(s) retries.", "option", 'r', int)=5,
     timeout: ("HTTP(s) timeout, in seconds.", "option", 't', int)=5,
     former_aqi: ("Previous AQI status, False=good, True=polluted.", 'positional', None, bool)=None,
     ):
