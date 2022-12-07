@@ -382,9 +382,10 @@ def main(
     report: ("Report live values", "flag", "R"),
     retries: ("Number of HTTP(s) retries.", "option", 'r', int)=5,
     timeout: ("HTTP(s) timeout, in seconds.", "option", 't', int)=5,
-    former_aqi: ("Previous AQI status, False=good, True=polluted.", 'positional', None, bool)=None,
+    former_aqi: ("Previous AQI status, False=good, True=polluted.", 'positional', None, int)=None,
     ):
 
+    former_aqi = bool(former_aqi)
     logging.basicConfig(level=logging.INFO)
 
     if test_chars:
