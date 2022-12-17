@@ -62,6 +62,7 @@ SENSORS = {
     'Franciszkanska':   'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.059085&longitude=19.933919&id=10211&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
     'Warszawska':       'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.070088&longitude=19.943812&id=87166&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
     'Studencka':        'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.062418&longitude=19.928368&id=86934&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
+    'Straszewskiego':   'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.057224&longitude=19.933157&id=103904&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
 }
 
 
