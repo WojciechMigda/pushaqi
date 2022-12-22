@@ -29,6 +29,9 @@ jobs:
     - name: Install plac
       run: pip install plac
 
+    - name: Install lxml
+      run: pip install lxml
+
     - name: Collect hourly AQI and push status
       run: |
         python3 ./pusher.py $(cat aqi_flag.txt)

@@ -16,8 +16,8 @@ from requests.packages.urllib3.util.retry import Retry
 from xml.dom import minidom
 
 
-MASTODON_HOST = os.environ['SERVER']
-MASTODON_TOKEN = os.environ['TOKEN']
+MASTODON_HOST = ''
+MASTODON_TOKEN = ''
 
 AQI_PM25_LEVELS = {
     'Good' : dict(hi=12.0,
@@ -57,12 +57,12 @@ temperature F
 wind        mph
 """
 SENSORS = {
-    'Mikolajska':       'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.062006&longitude=19.940984&id=8077&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
-    'Szpitalna':        'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.064539&longitude=19.942561&id=87160&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
-    'Franciszkanska':   'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.059085&longitude=19.933919&id=10211&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
-    'Warszawska':       'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.070088&longitude=19.943812&id=87166&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
-    'Studencka':        'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.062418&longitude=19.928368&id=86934&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
-    'Straszewskiego':   'https://widget.airly.org/api/v1/?displayMeasurements=true&latitude=50.057224&longitude=19.933157&id=103904&indexType=AIRLY_US_AQI&language=en&unitSpeed=imperial&unitTemperature=fahrenheit',
+    'Mikolajska':       'https://airly.org/widget/v2/?width=280&height=380&displayMeasurements=true&displayCAQI=false&autoHeight=true&autoWidth=false&language=en&indexType=AIRLY_US_AQI&unitSpeed=imperial&unitTemperature=fahrenheit&latitude=50.062006&longitude=19.940984&locationId=8077',
+    'Szpitalna':        'https://airly.org/widget/v2/?width=280&height=380&displayMeasurements=true&displayCAQI=false&autoHeight=true&autoWidth=false&language=en&indexType=AIRLY_US_AQI&unitSpeed=imperial&unitTemperature=fahrenheit&latitude=50.064539&longitude=19.942561&locationId=10213',
+    'Franciszkanska':   'https://airly.org/widget/v2/?width=280&height=380&displayMeasurements=true&displayCAQI=false&autoHeight=true&autoWidth=false&language=en&indexType=AIRLY_US_AQI&unitSpeed=imperial&unitTemperature=fahrenheit&latitude=50.059085&longitude=19.933919&locationId=10211',
+    'Warszawska':       'https://airly.org/widget/v2/?width=280&height=380&displayMeasurements=true&displayCAQI=false&autoHeight=true&autoWidth=false&language=en&indexType=AIRLY_US_AQI&unitSpeed=imperial&unitTemperature=fahrenheit&latitude=50.070088&longitude=19.943812&locationId=10048',
+    'Studencka':        'https://airly.org/widget/v2/?width=280&height=380&displayMeasurements=true&displayCAQI=false&autoHeight=true&autoWidth=false&language=en&indexType=AIRLY_US_AQI&unitSpeed=imperial&unitTemperature=fahrenheit&latitude=50.062418&longitude=19.928368&locationId=9910',
+    'Straszewskiego':   'https://airly.org/widget/v2/?width=280&height=380&displayMeasurements=true&displayCAQI=false&autoHeight=true&autoWidth=false&language=en&indexType=AIRLY_US_AQI&unitSpeed=imperial&unitTemperature=fahrenheit&latitude=50.057224&longitude=19.933157&locationId=57570',
 }
 
 
@@ -231,24 +231,28 @@ def pull_measurements(retries: int, timeout: int) -> Dict[str, Dict[str, str]]:
         if res is None:
             logging.warning(f'Pulling measurements for sensor {sensor} failed.')
             continue
-        j = res.json()
-        address: str = j.get('address', '')
-        live: bool = j.get('isLive', False)
-        description: str = j.get('description', '')
-        m: List[dict] = j.get('measurements', [])
+
+        html: str = res.text
+        from lxml import etree
+        parser = etree.HTMLParser()
+        root = etree.fromstring(html, parser=parser)
+        address: str = root.find('.//td[@class="summary__address"]').text.strip()
+        m: List[etree._Element] = root.findall('.//div[@class="measurement"]')
 
         if len(m) == 0:
-            logging.warning(f'Sensor {sensor} has no measurements. isLive={live} Description: {description}')
+            logging.warning(f'Sensor {sensor} has no measurements.')
             continue
 
-        KEYS = set(('PM10', 'PM25', 'PM1', 'PRESSURE', 'HUMIDITY', 'TEMPERATURE', 'WIND_SPEED'))
-        measurement: Dict[str, str]
+        #KEYS = set(('PM10', 'PM2.5', 'PM1', 'PRESSURE', 'HUMIDITY', 'TEMPERATURE', 'WIND_SPEED')) # API v1
+        KEYS = set(('PM10', 'PM2.5', 'PM1')) # API v2
+        measurement: etree._Element
         for measurement in m:
-            name: str = measurement.get('name', '')
-            value: str = measurement.get('value', '')
+            name: str = measurement.find('.//h2[@class="measurement__name"]').text.strip()
+            value: etree._Element = measurement.find('.//div[@class="measurement__value"]')
+            path: str = value.find('.//path').attrib.get('d', '')
             if name in KEYS:
                 params = meas.get(sensor, {})
-                params[name.lower()] = svg_path_to_number(collate_svg_paths(value))
+                params[name.lower()] = svg_path_to_number(path)
                 meas[sensor] = params
             pass
     return meas
@@ -329,7 +333,7 @@ def push_aqi_status(
         retries=3,
         timeout=5,
     ):
-    pm25: List[float] = [float(data['pm25'])for _, data in measurements.items() if 'pm25' in data]
+    pm25: List[float] = [float(data['pm2.5'])for _, data in measurements.items() if 'pm2.5' in data]
     logging.info(f'PM2.5 concentrations: {pm25}')
     pm25 = pm25[:3]
     if len(pm25) == 0:
@@ -404,6 +408,10 @@ def main(
             for name, value in data.items():
                 print(f' {name:>12s}{value:>8s}')
     else:
+        global MASTODON_HOST
+        global MASTODON_TOKEN
+        MASTODON_HOST = os.environ['SERVER']
+        MASTODON_TOKEN = os.environ['TOKEN']
         measurements = pull_measurements(retries=retries, timeout=timeout)
         push_aqi_status(measurements, former_bad_aqi=former_aqi,
             retries=retries, timeout=timeout)
