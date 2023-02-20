@@ -236,7 +236,12 @@ def pull_measurements(retries: int, timeout: int) -> Dict[str, Dict[str, str]]:
         from lxml import etree
         parser = etree.HTMLParser()
         root = etree.fromstring(html, parser=parser)
-        address: str = root.find('.//td[@class="summary__address"]').text.strip()
+        maybe_address: etree._Element = root.find('.//td[@class="summary__address"]')#.text.strip()
+        if not hasattr(maybe_address, 'text'):
+            print(f"[!] Sensor {sensor} does not seem to exist. It is missing 'summary__address' class element.")
+            continue
+        address: str = maybe_address.text.strip()
+
         m: List[etree._Element] = root.findall('.//div[@class="measurement"]')
 
         if len(m) == 0:
