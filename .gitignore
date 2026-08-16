@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Local state (committed by design: aqi_flag.txt / aqi_status.txt)
+.!aqi_*.txt.tmp
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
